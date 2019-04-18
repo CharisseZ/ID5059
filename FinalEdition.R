@@ -88,12 +88,12 @@ train <- func_dataClean(train, response, bool_UseOneHotEncoding = T)
 test <- func_dataClean(test, response, bool_UseOneHotEncoding = T)
 train$target <- ifelse(train$target == "Yes", 1, 0)
 
-# Create train with a column recording NAs
-setDT(train)
-setDT(test)
-trainNAcol <- train[, amount_nas := factor(rowSums(train == -1, na.rm = T))]
-testNAcol <- test[, amount_nas := factor(rowSums(test == -1, na.rm = T))]
-trainNAcol$target <- ifelse(trainNAcol$target == "Yes", 1, 0)
+# # Create train with a column recording NAs
+# setDT(train)
+# setDT(test)
+# trainNAcol <- train[, amount_nas := factor(rowSums(train == -1, na.rm = T))]
+# testNAcol <- test[, amount_nas := factor(rowSums(test == -1, na.rm = T))]
+# trainNAcol$target <- ifelse(trainNAcol$target == "Yes", 1, 0)
 
 
 # Create an undersampled set
@@ -248,13 +248,16 @@ GB_Model3 <- xgb.train(params = xgb_params3,
                        watchlist = watchlist3,
                        
                        nrounds = 500)
+mat1 <- xgb.importance(feature_names = colnames(new_tr1),model = GB_Model1)
+mat2 <- xgb.importance(feature_names = colnames(new_tr2),model = GB_Model2)
+mat3 <- xgb.importance(feature_names = colnames(new_tr3),model = GB_Model3)
+xgb.plot.importance(importance_matrix = mat1[1:20]) 
+xgb.plot.importance(importance_matrix = mat2[1:20]) 
+xgb.plot.importance(importance_matrix = mat3[1:20]) 
 
-mat <- xgb.importance(feature_names = colnames(new_tr3),model = GB_Model3)
-xgb.plot.importance(importance_matrix = mat[1:20]) 
-
-GBpred1 <- data.frame(id = test_id, target = predict(GB_Model1, dtest))
-GBpred2 <- data.frame(id = test_id, target = predict(GB_Model2, dtest))
-GBpred3 <- data.frame(id = test_id, target = predict(GB_Model3, dtestFeat))
+GBpred1 <- data.frame(id = test_id, target = predict(GB_Model1, dtest)) # Gini 0.28026
+GBpred2 <- data.frame(id = test_id, target = predict(GB_Model2, dtest)) # Gini 0.28226
+GBpred3 <- data.frame(id = test_id, target = predict(GB_Model3, dtestFeat)) # 0.27253
 
 GBpred1 %>% write_csv("GBpred1.csv")
 GBpred2 %>% write_csv("GBpred2.csv")
@@ -366,7 +369,8 @@ ini.mod.gam.cr.fac <- bam(target ~ s(ps_ind_01, k = 7, bs = "cr") + s(ps_ind_03,
 
 summary.gam(ini.mod.gam.cr.fac)
 
-GAMpred <- predict(ini.mod.gam.cr.fac, test.fac.data, type = "response")
+GAMpred <- data.frame(id = test_id, target = predict(ini.mod.gam.cr.fac, test.fac.data, type = "response")) # Gini 0.26485
+GAMpred %>% write_csv("GAMpred")
 
 # ----------------------- Logistic Model -----------------------
 fac.data <- train_notonehot %>%
@@ -381,7 +385,8 @@ test.fac.data <- test_notonehot %>%
 
 Logit_Model <- glm(target ~.,family=binomial(link='logit'),data=fac.data)
 
-LogPred=predict(Logit_Model, test.fac.data, type="response")
+LogPred=data.frame(id = test_id, target = predict(Logit_Model, test.fac.data, type="response")) # Gini 0.26556
+LogPred %>% write_csv("LogPred.csv")
 
 #------------------------ naive bayes model --------------------
 nbayes.mod <- naiveBayes(factor(target) ~ ., data = fac.data)
@@ -405,19 +410,11 @@ nb.gini     # 0.2311129
 
 ensemble_predictions <- function(pred_df, test_id) {
   
-  preddat <- data.frame(pred_vector)
-  
-  preds <-  rowMeans(preddat)
+  preds <-  rowMeans(pred_df)
   
   return(data.frame(id = test_id, target = preds))
   
 }
 
-ensemble_predictions(c(GBpred, NNpred, LogModelpred, GAMpred), test_id)
-
-multilogP <- ensemble_predictions(store, test_id)
-
-multilogP %>% write_csv("logtest.csv")
-
-MultiGB <- ensemble_predictions(data.frame(GBpred1$target, GBpred2$target, GBpred3$target, GAMpred, LogPred), test_id)
-MultiGB %>% write_csv("MultiGB.csv")
+Enspred <- ensemble_predictions(data.frame(GBpred1$target, GBpred2$target, GBpred3$target, GAMpred, LogPred), test_id)
+Enspred %>% write_csv("Enspred.csv")
